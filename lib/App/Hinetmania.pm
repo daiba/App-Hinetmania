@@ -5,6 +5,7 @@ use strict;
 use utf8;
 use AnyEvent;
 use AnyEvent::Twitter;
+use Encode;
 use Net::WeatherNews::QuakeWarning;
 
 =head1 NAME
@@ -43,19 +44,7 @@ if you don't export anything, such as for a purely object-oriented module.
 
 sub new {
     my $class = shift;
-    my $arg   = shift;
-    my $self  = bless {
-        consumer_key        => $arg->{consumer_key},
-        consumer_secret     => $arg->{consumer_secret},
-        access_token        => $arg->{access_token},
-        access_token_secret => $arg->{access_token_secret},
-        wmi_email           => $arg->{wmi_email},
-        wmi_passwd          => $arg->{wmi_passwd},
-        filter              => $arg->{filter},
-        twitter             => undef,
-        wmi                 => undef,
-    }, $class;
-
+    my $self = bless { @_, qid => 0 }, $class;
     $self->dataSet;
     return $self;
 }
@@ -403,12 +392,13 @@ sub dataSet {
     return $self;
 }
 
-=head2 init
+=head2 run
 
 =cut
 
-sub init {
+sub run {
     my $self = shift;
+    $self->{condvar} = AnyEvent->condvar;
     $self->{twitter} = AnyEvent::Twitter->new(
         consumer_key        => $self->{consumer_key},
         consumer_secret     => $self->{consumer_secret},
@@ -418,10 +408,11 @@ sub init {
     $self->{wmi} = Net::WeatherNews::QuakeWarning->new(
         email      => $self->{wmi_email},
         password   => $self->{wmi_passwd},
-        on_warning => $self->printout,
+        on_warning => sub { $self->printout },
     );
     $self->{wmi}->connect;
-    AnyEvent->condvar->recv;
+
+    $self->{condvar}->recv;
 }
 
 =head2 printout 
@@ -432,13 +423,47 @@ sub printout {
     my $self = shift;
     my $text = shift;
 
-    my $string = $self->{filter}->($text);
+    my $string = $self->filter($text);
     $self->{twitter}->request(
         api    => 'statuses/update',
         method => 'POST',
         params => { status => $string },
-        sub { AnyEvent->condvar->send }
-    );
+        sub { print "execute\n" }
+    ) if ($string);
+}
+
+=head2 filter
+
+=cut
+
+sub filter {
+    my $self = shift;
+    my $text = shift;
+    my $ret;
+
+    my ( $year, $month, $date, $hour, $min, $sec ) = ( $1, $2, $3, $4, $5, $6 )
+      if ( $text =~ /^(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/m );
+    my ( $area, $lat, $long, $depth, $magnitude, $scale ) =
+      ( $self->{location}->{$1}, $2 / 10, $3 / 10, $4, $5 / 10, $6 )
+      if ( $text =~
+        /^(\d{3}) N(\d{3}) E(\d{4}) (\d{3}) (\d{2}) ([0-9\-\+\/]{2}) RK/m );
+    my ( $id, $type, $num ) = ( $1, $2, $3 )
+      if ( $text =~ /ND(\d{14}) ([A-Z]+)(\d+)/ );
+
+    if ( $year && $area && ( $self->{qid} ne $id ) ) {
+        $scale = "不明" unless ($scale =~ /\d+/);
+        my $tmp =
+            "[速報] 20%02d/%02d/%02d %2d:%02dに"
+          . "M%.1f 予想最大震度%sの地震が%sで発生した模様です "
+          . "http://maps.google.co.jp"
+          . "/maps?f=q&hl=ja&t=k&om=0&z=7&q=%.1f%%20%.1f\n";
+
+        $ret = sprintf $tmp,
+          $year, $month, $date, $hour, $min, $magnitude, $scale, $area, $lat,
+          $long;
+        $self->{qid} = $id;
+    }
+    return $ret;
 }
 
 =head1 AUTHOR
