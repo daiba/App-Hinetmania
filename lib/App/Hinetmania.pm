@@ -406,9 +406,10 @@ sub run {
         access_token_secret => $self->{access_token_secret},
     );
     $self->{wmi} = Net::WeatherNews::QuakeWarning->new(
-        email      => $self->{wmi_email},
-        password   => $self->{wmi_passwd},
-        on_warning => sub { $self->printout },
+        email    => $self->{wmi_email},
+        password => $self->{wmi_passwd},
+        on_warning =>
+          sub { my $text = shift; print $text; $self->printout($text) },
     );
     $self->{wmi}->connect;
 
@@ -451,7 +452,7 @@ sub filter {
       if ( $text =~ /ND(\d{14}) ([A-Z]+)(\d+)/ );
 
     if ( $year && $area && ( $self->{qid} ne $id ) ) {
-        $scale = "不明" unless ($scale =~ /\d+/);
+        $scale = "不明" unless ( $scale =~ /\d+/ );
         my $tmp =
             "[速報] 20%02d/%02d/%02d %2d:%02dに"
           . "M%.1f 予想最大震度%sの地震が%sで発生した模様です "
