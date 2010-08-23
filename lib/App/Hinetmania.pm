@@ -409,7 +409,7 @@ sub run {
         email    => $self->{wmi_email},
         password => $self->{wmi_passwd},
         on_warning =>
-          sub { my $text = shift; print $text; $self->printout($text) },
+          sub { my $text = shift; $self->printout($text) },
     );
     $self->{wmi}->connect;
 
