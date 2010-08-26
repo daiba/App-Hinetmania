@@ -429,7 +429,7 @@ sub printout {
         api    => 'statuses/update',
         method => 'POST',
         params => { status => $string },
-        sub { print "execute\n" }
+        sub { print $string }
     ) if ($string);
 }
 
