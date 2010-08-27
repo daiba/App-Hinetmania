@@ -429,7 +429,7 @@ sub printout {
         api    => 'statuses/update',
         method => 'POST',
         params => { status => $string },
-        sub { print enocde("utf8", $string) }
+        sub { print encode("utf8", $string) }
     ) if ($string);
 }
 
